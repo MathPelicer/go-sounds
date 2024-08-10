@@ -8,7 +8,6 @@ import (
 	"path"
 	"time"
 
-	"github.com/eiannone/keyboard"
 	"github.com/faiface/beep"
 	"github.com/faiface/beep/effects"
 	"github.com/faiface/beep/mp3"
@@ -20,7 +19,7 @@ const (
 )
 
 type Song struct {
-	streamer beep.Streamer
+	streamer beep.StreamSeekCloser
 	format   beep.Format
 }
 
@@ -33,12 +32,34 @@ type Control string
 const (
 	START   Control = "start"
 	PLAYING Control = "playing"
-	NEXT    Control = "next"
+	NEXT    Control = "n"
 	PAUSE   Control = "p"
 )
 
 func (q *Queue) Add(songs ...Song) {
 	q.songs = append(q.songs, songs...)
+}
+
+func (q *Queue) addAllSongsToPlaylist(songs []string) {
+	for songIndex := range songs {
+		f, err := os.Open(path.Join(DIR, songs[songIndex]))
+
+		if err != nil {
+			log.Fatal("cant open file")
+		}
+
+		streamer, format, err := mp3.Decode(f)
+		if err != nil {
+			log.Fatal("cant decode file")
+		}
+
+		song := Song{
+			streamer: streamer,
+			format:   format,
+		}
+
+		q.Add(song)
+	}
 }
 
 func listSongs(dir string) []string {
@@ -82,34 +103,17 @@ func selectSong(songs []string) int {
 	return songIndex
 }
 
-func (q *Queue) addAllSongsToPlaylist(songs []string) {
-	for songIndex, _ := range songs {
-		f, err := os.Open(path.Join(DIR, songs[songIndex]))
-
-		if err != nil {
-			log.Fatal("cant open file")
-		}
-
-		streamer, format, err := mp3.Decode(f)
-		if err != nil {
-			log.Fatal("cant decode file")
-		}
-
-		song := Song{
-			streamer: streamer,
-			format:   format,
-		}
-
-		q.Add(song)
-	}
-}
-
 func main() {
 
-	fmt.Println("go-sounds playlist =)")
+	fmt.Println("###    Welcome to go-sounds playlist =)  ###")
+	fmt.Println()
+	fmt.Println("### Commands:                            ###")
+	fmt.Println("| -> Enter [p] to pause/resume the song.")
+	fmt.Println("| -> Enter [next] to play the next song.")
+	fmt.Println("############################################")
 
 	songs := listSongs(DIR)
-	printSongs(songs)
+	//printSongs(songs)
 
 	playlist := &Queue{}
 	playlist.addAllSongsToPlaylist(songs)
@@ -130,7 +134,7 @@ func main() {
 	//defer playlist.streamers[0].Close()
 	control := START
 	playlistIndex := 0
-	for len(playlist.songs) > 0 {
+	for playlistIndex < len(playlist.songs) {
 		if control == START || control == NEXT {
 			sr := playlist.songs[playlistIndex].format
 			speaker.Init(sr.SampleRate, sr.SampleRate.N(time.Second/10))
@@ -144,13 +148,17 @@ func main() {
 			Silent:   false,
 		}
 
-		fmt.Printf("Now playing: %s\n", songs[playlistIndex])
-		speaker.Play(volume)
-
 		control = PLAYING
 
-		fmt.Println("Enter [p] to pause/resume.")
-		fmt.Println("Enter [next] to play the next song.")
+		defer playlist.songs[playlistIndex].streamer.Close()
+
+		fmt.Println(playlist.songs[playlistIndex].streamer.Position())
+
+		fmt.Printf("Now playing: %s\n", songs[playlistIndex])
+		speaker.Play(beep.Seq(volume, beep.Callback(func() {
+			playlistIndex++
+			control = NEXT
+		})))
 
 		for {
 			fmt.Scan(&control)
@@ -168,7 +176,7 @@ func main() {
 			}
 		}
 
-		//useKeyboardLib(*ctrl)
+		//useKeyboardLib(*ctrl, &playlistIndex)
 		//select {
 		//case <-done:
 		//	return
@@ -180,20 +188,25 @@ func main() {
 	}
 }
 
-func useKeyboardLib(ctrl beep.Ctrl) {
-	control, key, err := keyboard.GetSingleKey()
-	if err != nil {
-		panic(err)
-	}
+// func useKeyboardLib(ctrl beep.Ctrl, playlistIndex *int) {
+// 	control, key, err := keyboard.GetSingleKey()
+// 	if err != nil {
+// 		panic(err)
+// 	}
 
-	//fmt.Scanln()
-	if control == rune(112) {
-		speaker.Lock()
-		ctrl.Paused = !ctrl.Paused
-		speaker.Unlock()
-	}
+// 	//fmt.Scanln()
+// 	if control == rune(112) {
+// 		speaker.Lock()
+// 		ctrl.Paused = !ctrl.Paused
+// 		speaker.Unlock()
+// 	}
+// 	if control == rune(110) {
+// 		speaker.Lock()
+// 		*playlistIndex += 1
+// 		speaker.Unlock()
+// 	}
 
-	if key == keyboard.KeyEsc {
-		return
-	}
-}
+// 	if key == keyboard.KeyEsc {
+// 		speaker.Close()
+// 	}
+// }
