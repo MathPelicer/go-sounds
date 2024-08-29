@@ -122,59 +122,66 @@ func main() {
 	playlist := &Queue{}
 	playlist.addAllSongsToPlaylist(songs)
 
+	//numberOfSongs := len(playlist.songs)
+
 	control := START
 	c := make(chan string)
 	playlistIndex := 0
 	go waitForUserInput(c)
-bigloop:
-	for playlistIndex < len(playlist.songs) {
-		if control == START || control == NEXT {
-			sr := playlist.songs[playlistIndex].format
-			speaker.Init(sr.SampleRate, sr.SampleRate.N(time.Second/10))
-		}
 
-		ctrl := &beep.Ctrl{Streamer: playlist.songs[playlistIndex].streamer, Paused: false}
-		volume := &effects.Volume{
-			Streamer: ctrl,
-			Base:     2,
-			Volume:   -1.0,
-			Silent:   false,
-		}
+	ctrl := startSong(control, playlist, songs, playlistIndex)
 
-		fmt.Printf("Now playing: %s\n", songs[playlistIndex])
-		speaker.Play(beep.Seq(volume))
-
-		for {
-
-			select {
-			case controlCommand := <-c:
-				if controlCommand == "n" {
-					goToNextSong(playlist, &playlistIndex)
-					control = NEXT
-					goto bigloop
-				}
-				if controlCommand == "p" {
-					speaker.Lock()
-					ctrl.Paused = !ctrl.Paused
-					speaker.Unlock()
-				}
-				if controlCommand == "l" {
-					printSongs(songs)
-				}
-				if controlCommand == "r" {
-					goToRandomSong(playlist, &playlistIndex)
-					control = NEXT
-					goto bigloop
-				}
-			case <-time.After(time.Millisecond * 500):
-				if isSongFinished(playlist, playlistIndex) {
-					goToNextSong(playlist, &playlistIndex)
-					control = NEXT
-					goto bigloop
-				}
+	for {
+		select {
+		case controlCommand := <-c:
+			if controlCommand == "n" {
+				goToNextSong(playlist, &playlistIndex)
+				control = NEXT
+				ctrl = startSong(control, playlist, songs, playlistIndex)
 			}
+			if controlCommand == "p" {
+				speaker.Lock()
+				ctrl.Paused = !ctrl.Paused
+				speaker.Unlock()
+			}
+			if controlCommand == "l" {
+				printSongs(songs)
+			}
+			if controlCommand == "r" {
+				goToRandomSong(playlist, &playlistIndex)
+				control = NEXT
+				ctrl = startSong(control, playlist, songs, playlistIndex)
+			}
+		case <-time.After(time.Millisecond * 500):
+
+		}
+
+		if isSongFinished(playlist, playlistIndex) {
+			goToNextSong(playlist, &playlistIndex)
+			control = NEXT
+			ctrl = startSong(control, playlist, songs, playlistIndex)
 		}
 	}
+}
+
+func startSong(control Control, playlist *Queue, songs []string, playlistIndex int) *beep.Ctrl {
+	if control == START || control == NEXT {
+		sr := playlist.songs[playlistIndex].format
+		speaker.Init(sr.SampleRate, sr.SampleRate.N(time.Second/10))
+	}
+
+	ctrl := &beep.Ctrl{Streamer: playlist.songs[playlistIndex].streamer, Paused: false}
+	volume := &effects.Volume{
+		Streamer: ctrl,
+		Base:     2,
+		Volume:   -1.0,
+		Silent:   false,
+	}
+
+	fmt.Printf("Now playing: %s\n", songs[playlistIndex])
+	speaker.Play(beep.Seq(volume))
+
+	return ctrl
 }
 
 func goToNextSong(playlist *Queue, playlistIndex *int) {
