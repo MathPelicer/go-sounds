@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io/fs"
 	"log"
+	"math/rand"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/faiface/beep"
@@ -15,7 +18,7 @@ import (
 )
 
 const (
-	DIR = "../../car-pendrive/"
+	DIR = "../../car_pendrive/"
 )
 
 type Song struct {
@@ -109,31 +112,21 @@ func main() {
 	fmt.Println()
 	fmt.Println("### Commands:                            ###")
 	fmt.Println("| -> Enter [p] to pause/resume the song.")
-	fmt.Println("| -> Enter [next] to play the next song.")
+	fmt.Println("| -> Enter [n] to play the next song.")
+	fmt.Println("| -> Enter [l] to list all songs.")
+	fmt.Println("| -> Enter [r] to try your luck ;).")
 	fmt.Println("############################################")
 
 	songs := listSongs(DIR)
-	//printSongs(songs)
 
 	playlist := &Queue{}
 	playlist.addAllSongsToPlaylist(songs)
-	//songIndex := selectSong(songs)
 
-	//fmt.Println(songs[songIndex])
-	//f, err := os.Open(path.Join(DIR, songs[songIndex]))
-
-	//if err != nil {
-	//	log.Fatal("cant open file")
-	//}
-
-	//streamer, format, err := mp3.Decode(f)
-	//if err != nil {
-	//	log.Fatal("cant decode file")
-	//}
-
-	//defer playlist.streamers[0].Close()
 	control := START
+	c := make(chan string)
 	playlistIndex := 0
+	go waitForUserInput(c)
+bigloop:
 	for playlistIndex < len(playlist.songs) {
 		if control == START || control == NEXT {
 			sr := playlist.songs[playlistIndex].format
@@ -148,65 +141,67 @@ func main() {
 			Silent:   false,
 		}
 
-		control = PLAYING
-
-		defer playlist.songs[playlistIndex].streamer.Close()
-
-		fmt.Println(playlist.songs[playlistIndex].streamer.Position())
-
 		fmt.Printf("Now playing: %s\n", songs[playlistIndex])
-		speaker.Play(beep.Seq(volume, beep.Callback(func() {
-			playlistIndex++
-			control = NEXT
-		})))
+		speaker.Play(beep.Seq(volume))
 
 		for {
-			fmt.Scan(&control)
 
-			if control == NEXT {
-				speaker.Lock()
-				playlistIndex += 1
-				speaker.Unlock()
-				break
-			}
-			if control == PAUSE {
-				speaker.Lock()
-				ctrl.Paused = !ctrl.Paused
-				speaker.Unlock()
+			select {
+			case controlCommand := <-c:
+				if controlCommand == "n" {
+					goToNextSong(playlist, &playlistIndex)
+					control = NEXT
+					goto bigloop
+				}
+				if controlCommand == "p" {
+					speaker.Lock()
+					ctrl.Paused = !ctrl.Paused
+					speaker.Unlock()
+				}
+				if controlCommand == "l" {
+					printSongs(songs)
+				}
+				if controlCommand == "r" {
+					goToRandomSong(playlist, &playlistIndex)
+					control = NEXT
+					goto bigloop
+				}
+			case <-time.After(time.Millisecond * 500):
+				if isSongFinished(playlist, playlistIndex) {
+					goToNextSong(playlist, &playlistIndex)
+					control = NEXT
+					goto bigloop
+				}
 			}
 		}
-
-		//useKeyboardLib(*ctrl, &playlistIndex)
-		//select {
-		//case <-done:
-		//	return
-		//case <-time.After(time.Second):
-		//	speaker.Lock()
-		//	fmt.Println(format.SampleRate.D(streamer.Position()).Round(time.Second))
-		//	speaker.Unlock()
-		//}
 	}
 }
 
-// func useKeyboardLib(ctrl beep.Ctrl, playlistIndex *int) {
-// 	control, key, err := keyboard.GetSingleKey()
-// 	if err != nil {
-// 		panic(err)
-// 	}
+func goToNextSong(playlist *Queue, playlistIndex *int) {
+	speaker.Lock()
+	playlist.songs[*playlistIndex].streamer.Close()
+	*playlistIndex += 1
+	speaker.Unlock()
+}
 
-// 	//fmt.Scanln()
-// 	if control == rune(112) {
-// 		speaker.Lock()
-// 		ctrl.Paused = !ctrl.Paused
-// 		speaker.Unlock()
-// 	}
-// 	if control == rune(110) {
-// 		speaker.Lock()
-// 		*playlistIndex += 1
-// 		speaker.Unlock()
-// 	}
+func goToRandomSong(playlist *Queue, playlistIndex *int) {
+	speaker.Lock()
+	playlist.songs[*playlistIndex].streamer.Close()
+	*playlistIndex = rand.Intn(len(playlist.songs))
+	speaker.Unlock()
+}
 
-// 	if key == keyboard.KeyEsc {
-// 		speaker.Close()
-// 	}
-// }
+func waitForUserInput(c chan string) {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		char, _ := reader.ReadString('\n')
+
+		c <- strings.TrimSuffix(char, "\n")
+	}
+}
+
+func isSongFinished(playlist *Queue, playlistIndex int) bool {
+	songLen := playlist.songs[playlistIndex].streamer.Len()
+	songPos := playlist.songs[playlistIndex].streamer.Position()
+	return songLen == songPos
+}
