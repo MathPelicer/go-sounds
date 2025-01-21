@@ -27,7 +27,7 @@ type Song struct {
 	format   beep.Format
 }
 
-type Queue struct {
+type SongsList struct {
 	songs []Song
 }
 
@@ -40,11 +40,11 @@ const (
 	PAUSE   Control = "p"
 )
 
-func (q *Queue) Add(songs ...Song) {
+func (q *SongsList) Add(songs ...Song) {
 	q.songs = append(q.songs, songs...)
 }
 
-func (q *Queue) addAllSongsToPlaylist(songs []string) {
+func (q *SongsList) addAllSongsToPlaylist(songs []string) {
 	for songIndex := range songs {
 		f, err := os.Open(path.Join(DIR, songs[songIndex]))
 
@@ -121,7 +121,7 @@ func main() {
 
 	songs := listSongs(DIR)
 
-	playlist := &Queue{}
+	playlist := &SongsList{}
 	playlist.addAllSongsToPlaylist(songs)
 
 	//numberOfSongs := len(playlist.songs)
@@ -161,6 +161,7 @@ func main() {
 				control = NEXT
 				ctrl = startSong(control, playlist, songs, songIndex)
 			}
+
 		case <-time.After(time.Millisecond * 500):
 
 		}
@@ -173,7 +174,7 @@ func main() {
 	}
 }
 
-func startSong(control Control, playlist *Queue, songs []string, playlistIndex int) *beep.Ctrl {
+func startSong(control Control, playlist *SongsList, songs []string, playlistIndex int) *beep.Ctrl {
 	if control == START || control == NEXT {
 		sr := playlist.songs[playlistIndex].format
 		speaker.Init(sr.SampleRate, sr.SampleRate.N(time.Second/10))
@@ -183,7 +184,7 @@ func startSong(control Control, playlist *Queue, songs []string, playlistIndex i
 	volume := &effects.Volume{
 		Streamer: ctrl,
 		Base:     2,
-		Volume:   -4.0,
+		Volume:   -2.0,
 		Silent:   false,
 	}
 
@@ -193,21 +194,21 @@ func startSong(control Control, playlist *Queue, songs []string, playlistIndex i
 	return ctrl
 }
 
-func goToNextSong(playlist *Queue, playlistIndex *int) {
+func goToNextSong(playlist *SongsList, playlistIndex *int) {
 	speaker.Lock()
 	playlist.songs[*playlistIndex].streamer.Close()
 	*playlistIndex += 1
 	speaker.Unlock()
 }
 
-func goToSong(playlist *Queue, playlistIndex *int, songIndex int) {
+func goToSong(playlist *SongsList, playlistIndex *int, songIndex int) {
 	speaker.Lock()
 	playlist.songs[*playlistIndex].streamer.Close()
 	*playlistIndex = songIndex
 	speaker.Unlock()
 }
 
-func goToRandomSong(playlist *Queue, playlistIndex *int) {
+func goToRandomSong(playlist *SongsList, playlistIndex *int) {
 	speaker.Lock()
 	playlist.songs[*playlistIndex].streamer.Close()
 	*playlistIndex = rand.Intn(len(playlist.songs))
@@ -223,7 +224,7 @@ func waitForUserInput(c chan string) {
 	}
 }
 
-func isSongFinished(playlist *Queue, playlistIndex int) bool {
+func isSongFinished(playlist *SongsList, playlistIndex int) bool {
 	songLen := playlist.songs[playlistIndex].streamer.Len()
 	songPos := playlist.songs[playlistIndex].streamer.Position()
 	return songLen == songPos
