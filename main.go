@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,7 +19,7 @@ import (
 )
 
 const (
-	DIR = "../../car_pendrive/"
+	DIR = "../../car-pendrive/"
 )
 
 type Song struct {
@@ -115,6 +116,7 @@ func main() {
 	fmt.Println("| -> Enter [n] to play the next song.")
 	fmt.Println("| -> Enter [l] to list all songs.")
 	fmt.Println("| -> Enter [r] to try your luck ;).")
+	fmt.Println("| -> Enter [song-number] to play the specific song")
 	fmt.Println("############################################")
 
 	songs := listSongs(DIR)
@@ -152,6 +154,13 @@ func main() {
 				control = NEXT
 				ctrl = startSong(control, playlist, songs, playlistIndex)
 			}
+
+			songIndex, convErr := strconv.Atoi(controlCommand)
+			if convErr == nil {
+				goToSong(playlist, &playlistIndex, songIndex)
+				control = NEXT
+				ctrl = startSong(control, playlist, songs, songIndex)
+			}
 		case <-time.After(time.Millisecond * 500):
 
 		}
@@ -174,7 +183,7 @@ func startSong(control Control, playlist *Queue, songs []string, playlistIndex i
 	volume := &effects.Volume{
 		Streamer: ctrl,
 		Base:     2,
-		Volume:   -1.0,
+		Volume:   -4.0,
 		Silent:   false,
 	}
 
@@ -188,6 +197,13 @@ func goToNextSong(playlist *Queue, playlistIndex *int) {
 	speaker.Lock()
 	playlist.songs[*playlistIndex].streamer.Close()
 	*playlistIndex += 1
+	speaker.Unlock()
+}
+
+func goToSong(playlist *Queue, playlistIndex *int, songIndex int) {
+	speaker.Lock()
+	playlist.songs[*playlistIndex].streamer.Close()
+	*playlistIndex = songIndex
 	speaker.Unlock()
 }
 
