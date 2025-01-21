@@ -25,6 +25,7 @@ const (
 type Song struct {
 	streamer beep.StreamSeekCloser
 	format   beep.Format
+	name     string
 }
 
 type SongsList struct {
@@ -60,6 +61,7 @@ func (q *SongsList) addAllSongsToPlaylist(songs []string) {
 		song := Song{
 			streamer: streamer,
 			format:   format,
+			name:     songs[songIndex],
 		}
 
 		q.Add(song)
@@ -163,7 +165,8 @@ func main() {
 			}
 
 		case <-time.After(time.Millisecond * 500):
-
+			fmt.Print("\033[H\033[2J")
+			songProgress(playlist, playlistIndex)
 		}
 
 		if isSongFinished(playlist, playlistIndex) {
@@ -184,7 +187,7 @@ func startSong(control Control, playlist *SongsList, songs []string, playlistInd
 	volume := &effects.Volume{
 		Streamer: ctrl,
 		Base:     2,
-		Volume:   -2.0,
+		Volume:   -4.0,
 		Silent:   false,
 	}
 
@@ -228,4 +231,23 @@ func isSongFinished(playlist *SongsList, playlistIndex int) bool {
 	songLen := playlist.songs[playlistIndex].streamer.Len()
 	songPos := playlist.songs[playlistIndex].streamer.Position()
 	return songLen == songPos
+}
+
+func songProgress(playlist *SongsList, playlistIndex int) {
+	songLen := playlist.songs[playlistIndex].streamer.Len()
+	chunkSize := songLen / 30
+
+	chunksListened := playlist.songs[playlistIndex].streamer.Position() / chunkSize
+
+	fmt.Println("Playing: ", playlist.songs[playlistIndex].name)
+	fmt.Print("[")
+	for i := 0; i < 30; i++ {
+		if i <= chunksListened {
+			fmt.Print("#")
+		} else {
+			fmt.Print(" ")
+		}
+	}
+	fmt.Print("]")
+
 }
