@@ -126,14 +126,12 @@ func main() {
 	playlist := &SongsList{}
 	playlist.addAllSongsToPlaylist(songs)
 
-	//numberOfSongs := len(playlist.songs)
-
 	control := START
 	c := make(chan string)
 	playlistIndex := 0
 	go waitForUserInput(c)
 
-	ctrl := startSong(control, playlist, songs, playlistIndex)
+	ctrl := startSong(control, playlist, playlistIndex)
 
 	for {
 		select {
@@ -141,7 +139,7 @@ func main() {
 			if controlCommand == "n" {
 				goToNextSong(playlist, &playlistIndex)
 				control = NEXT
-				ctrl = startSong(control, playlist, songs, playlistIndex)
+				ctrl = startSong(control, playlist, playlistIndex)
 			}
 			if controlCommand == "p" {
 				speaker.Lock()
@@ -154,30 +152,31 @@ func main() {
 			if controlCommand == "r" {
 				goToRandomSong(playlist, &playlistIndex)
 				control = NEXT
-				ctrl = startSong(control, playlist, songs, playlistIndex)
+				ctrl = startSong(control, playlist, playlistIndex)
 			}
 
 			songIndex, convErr := strconv.Atoi(controlCommand)
 			if convErr == nil {
 				goToSong(playlist, &playlistIndex, songIndex)
 				control = NEXT
-				ctrl = startSong(control, playlist, songs, songIndex)
+				ctrl = startSong(control, playlist, songIndex)
 			}
 
 		case <-time.After(time.Millisecond * 500):
-			fmt.Print("\033[H\033[2J")
+			//fmt.Print("\033[H\033[2J")
 			songProgress(playlist, playlistIndex)
 		}
 
 		if isSongFinished(playlist, playlistIndex) {
 			goToNextSong(playlist, &playlistIndex)
 			control = NEXT
-			ctrl = startSong(control, playlist, songs, playlistIndex)
+			ctrl = startSong(control, playlist, playlistIndex)
+			fmt.Println()
 		}
 	}
 }
 
-func startSong(control Control, playlist *SongsList, songs []string, playlistIndex int) *beep.Ctrl {
+func startSong(control Control, playlist *SongsList, playlistIndex int) *beep.Ctrl {
 	if control == START || control == NEXT {
 		sr := playlist.songs[playlistIndex].format
 		speaker.Init(sr.SampleRate, sr.SampleRate.N(time.Second/10))
@@ -191,7 +190,6 @@ func startSong(control Control, playlist *SongsList, songs []string, playlistInd
 		Silent:   false,
 	}
 
-	fmt.Printf("Now playing: %s\n", songs[playlistIndex])
 	speaker.Play(beep.Seq(volume))
 
 	return ctrl
@@ -239,15 +237,16 @@ func songProgress(playlist *SongsList, playlistIndex int) {
 
 	chunksListened := playlist.songs[playlistIndex].streamer.Position() / chunkSize
 
-	fmt.Println("Playing: ", playlist.songs[playlistIndex].name)
-	fmt.Print("[")
+	progressString := "\r" + playlist.songs[playlistIndex].name + " ["
+
 	for i := 0; i < 30; i++ {
 		if i <= chunksListened {
-			fmt.Print("#")
+			progressString += "#"
 		} else {
-			fmt.Print(" ")
+			progressString += " "
 		}
 	}
-	fmt.Print("]")
+	progressString += "]"
 
+	fmt.Printf("\r%s", progressString)
 }
