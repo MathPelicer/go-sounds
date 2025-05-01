@@ -8,10 +8,10 @@ import (
 	"math/rand"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/faiface/beep"
 	"github.com/faiface/beep/effects"
 	"github.com/faiface/beep/mp3"
@@ -19,8 +19,14 @@ import (
 )
 
 const (
-	DIR = "../../car-pendrive/"
+	DIR = "/home/mathe/Music"
 )
+
+type model struct {
+	choices  []Song
+	cursor   int
+	selected map[int]struct{}
+}
 
 type Song struct {
 	streamer beep.StreamSeekCloser
@@ -40,6 +46,75 @@ const (
 	NEXT    Control = "n"
 	PAUSE   Control = "p"
 )
+
+func initialModel() model {
+	songs := listSongs(DIR)
+	playlist := &SongsList{}
+	playlist.addAllSongsToPlaylist(songs)
+	return model{
+		choices:  playlist.songs,
+		selected: make(map[int]struct{}),
+	}
+}
+
+func (m model) Init() tea.Cmd {
+	return nil
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch message := msg.(type) {
+	case tea.KeyMsg:
+		switch message.String() {
+		case "ctrl+c", "q":
+			return m, tea.Quit
+		case "j", "down":
+			if m.cursor < len(m.choices)-1 {
+				m.cursor++
+			}
+		case "k", "up":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case " ", "enter":
+			_, ok := m.selected[m.cursor]
+			if ok {
+				delete(m.selected, m.cursor)
+			} else {
+				m.selected[m.cursor] = struct{}{}
+			}
+		}
+	}
+
+	return m, nil
+}
+
+func (m model) View() string {
+	s := "what should I do?\n"
+
+	for i, choice := range m.choices {
+		cursor := " "
+		if m.cursor == i {
+			cursor = ">"
+		}
+
+		checked := " "
+		if _, ok := m.selected[i]; ok {
+			checked = "x"
+		}
+
+		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice.name)
+	}
+
+	return s
+}
+
+func main() {
+	p := tea.NewProgram(initialModel())
+	if _, err := p.Run(); err != nil {
+		fmt.Printf("Error %v", err)
+		os.Exit(1)
+	}
+}
 
 func (q *SongsList) Add(songs ...Song) {
 	q.songs = append(q.songs, songs...)
@@ -109,72 +184,72 @@ func selectSong(songs []string) int {
 	return songIndex
 }
 
-func main() {
-
-	fmt.Println("###    Welcome to go-sounds playlist =)  ###")
-	fmt.Println()
-	fmt.Println("### Commands:                            ###")
-	fmt.Println("| -> Enter [p] to pause/resume the song.")
-	fmt.Println("| -> Enter [n] to play the next song.")
-	fmt.Println("| -> Enter [l] to list all songs.")
-	fmt.Println("| -> Enter [r] to try your luck ;).")
-	fmt.Println("| -> Enter [song-number] to play the specific song")
-	fmt.Println("############################################")
-
-	songs := listSongs(DIR)
-
-	playlist := &SongsList{}
-	playlist.addAllSongsToPlaylist(songs)
-
-	control := START
-	c := make(chan string)
-	playlistIndex := 0
-	go waitForUserInput(c)
-
-	ctrl := startSong(control, playlist, playlistIndex)
-
-	for {
-		select {
-		case controlCommand := <-c:
-			if controlCommand == "n" {
-				goToNextSong(playlist, &playlistIndex)
-				control = NEXT
-				ctrl = startSong(control, playlist, playlistIndex)
-			}
-			if controlCommand == "p" {
-				speaker.Lock()
-				ctrl.Paused = !ctrl.Paused
-				speaker.Unlock()
-			}
-			if controlCommand == "l" {
-				printSongs(songs)
-			}
-			if controlCommand == "r" {
-				goToRandomSong(playlist, &playlistIndex)
-				control = NEXT
-				ctrl = startSong(control, playlist, playlistIndex)
-			}
-
-			songIndex, convErr := strconv.Atoi(controlCommand)
-			if convErr == nil {
-				goToSong(playlist, &playlistIndex, songIndex)
-				control = NEXT
-				ctrl = startSong(control, playlist, songIndex)
-			}
-
-		case <-time.After(time.Millisecond * 500):
-			//fmt.Print("\033[H\033[2J")
-			songProgress(playlist, playlistIndex)
-		}
-
-		if isSongFinished(playlist, playlistIndex) {
-			goToNextSong(playlist, &playlistIndex)
-			control = NEXT
-			ctrl = startSong(control, playlist, playlistIndex)
-			fmt.Println()
-		}
-	}
-}
+//func main() {
+//
+//	fmt.Println("###    Welcome to go-sounds playlist =)  ###")
+//	fmt.Println()
+//	fmt.Println("### Commands:                            ###")
+//	fmt.Println("| -> Enter [p] to pause/resume the song.")
+//	fmt.Println("| -> Enter [n] to play the next song.")
+//	fmt.Println("| -> Enter [l] to list all songs.")
+//	fmt.Println("| -> Enter [r] to try your luck ;).")
+//	fmt.Println("| -> Enter [song-number] to play the specific song")
+//	fmt.Println("############################################")
+//
+//	songs := listSongs(DIR)
+//
+//	playlist := &SongsList{}
+//	playlist.addAllSongsToPlaylist(songs)
+//
+//	control := START
+//	c := make(chan string)
+//	playlistIndex := 0
+//	go waitForUserInput(c)
+//
+//	ctrl := startSong(control, playlist, playlistIndex)
+//
+//	for {
+//		select {
+//		case controlCommand := <-c:
+//			if controlCommand == "n" {
+//				goToNextSong(playlist, &playlistIndex)
+//				control = NEXT
+//				ctrl = startSong(control, playlist, playlistIndex)
+//			}
+//			if controlCommand == "p" {
+//				speaker.Lock()
+//				ctrl.Paused = !ctrl.Paused
+//				speaker.Unlock()
+//			}
+//			if controlCommand == "l" {
+//				printSongs(songs)
+//			}
+//			if controlCommand == "r" {
+//				goToRandomSong(playlist, &playlistIndex)
+//				control = NEXT
+//				ctrl = startSong(control, playlist, playlistIndex)
+//			}
+//
+//			songIndex, convErr := strconv.Atoi(controlCommand)
+//			if convErr == nil {
+//				goToSong(playlist, &playlistIndex, songIndex)
+//				control = NEXT
+//				ctrl = startSong(control, playlist, songIndex)
+//			}
+//
+//		case <-time.After(time.Millisecond * 500):
+//			//fmt.Print("\033[H\033[2J")
+//			songProgress(playlist, playlistIndex)
+//		}
+//
+//		if isSongFinished(playlist, playlistIndex) {
+//			goToNextSong(playlist, &playlistIndex)
+//			control = NEXT
+//			ctrl = startSong(control, playlist, playlistIndex)
+//			fmt.Println()
+//		}
+//	}
+//}
 
 func startSong(control Control, playlist *SongsList, playlistIndex int) *beep.Ctrl {
 	if control == START || control == NEXT {
