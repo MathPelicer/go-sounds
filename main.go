@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"runtime"
 	"strings"
 	"time"
 
@@ -16,10 +17,6 @@ import (
 	"github.com/faiface/beep/effects"
 	"github.com/faiface/beep/mp3"
 	"github.com/faiface/beep/speaker"
-)
-
-const (
-	DIR = "/home/mathe/Music"
 )
 
 type model struct {
@@ -47,10 +44,19 @@ const (
 	PAUSE   Control = "p"
 )
 
+func verifyOS() string {
+	if runtime.GOOS == "windows" {
+		return "C:/Users/mathe/Music/System Of A Down/Hypnotize"
+	} else {
+		return "/home/mathe/Music"
+	}
+}
+
 func initialModel() model {
-	songs := listSongs(DIR)
+	dir := verifyOS()
+	songs := listSongs(dir)
 	playlist := &SongsList{}
-	playlist.addAllSongsToPlaylist(songs)
+	playlist.addAllSongsToPlaylist(songs, dir)
 	return model{
 		choices:  playlist.songs,
 		selected: make(map[int]struct{}),
@@ -120,10 +126,9 @@ func (q *SongsList) Add(songs ...Song) {
 	q.songs = append(q.songs, songs...)
 }
 
-func (q *SongsList) addAllSongsToPlaylist(songs []string) {
+func (q *SongsList) addAllSongsToPlaylist(songs []string, dir string) {
 	for songIndex := range songs {
-		f, err := os.Open(path.Join(DIR, songs[songIndex]))
-
+		f, err := os.Open(path.Join(dir, songs[songIndex]))
 		if err != nil {
 			log.Fatal("cant open file")
 		}
