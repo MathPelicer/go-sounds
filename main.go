@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"math/rand"
@@ -12,7 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/faiface/beep"
 	"github.com/faiface/beep/effects"
 	"github.com/faiface/beep/mp3"
@@ -20,9 +23,11 @@ import (
 )
 
 type model struct {
-	choices  []Song
+	list     list.Model
+	choice   string
 	cursor   int
 	selected map[int]struct{}
+	quitting bool
 }
 
 type Song struct {
@@ -52,13 +57,56 @@ func verifyOS() string {
 	}
 }
 
+var (
+	titleStyle        = lipgloss.NewStyle().MarginLeft(2)
+	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
+	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("170"))
+	paginationStyle   = list.DefaultStyles().PaginationStyle.PaddingLeft(4)
+	helpStyle         = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
+	quitTextStyle     = lipgloss.NewStyle().Margin(1, 0, 2, 4)
+)
+
+type itemDelegate struct{}
+
+func (d itemDelegate) Height() int                             { return 1 }
+func (d itemDelegate) Spacing() int                            { return 0 }
+func (d itemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	i, ok := listItem.(item)
+	if !ok {
+		return
+	}
+
+	str := fmt.Sprintf("%d. %s", index+1, i)
+
+	fn := itemStyle.Render
+	if index == m.Index() {
+		fn = func(s ...string) string {
+			return selectedItemStyle.Render("> " + strings.Join(s, " "))
+		}
+	}
+
+	fmt.Fprint(w, fn(str))
+}
+
+type item string
+
+func (i item) FilterValue() string { return "" }
+
 func initialModel() model {
 	dir := verifyOS()
 	songs := listSongs(dir)
 	playlist := &SongsList{}
 	playlist.addAllSongsToPlaylist(songs, dir)
+
+	items := []list.Item{}
+	for _, song := range playlist.songs {
+		items = append(items, item(song.name))
+	}
+
+	l := list.New(items, itemDelegate{}, 20, 20)
 	return model{
-		choices:  playlist.songs,
+		list:     l,
 		selected: make(map[int]struct{}),
 	}
 }
@@ -74,12 +122,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		case "j", "down":
-			if m.cursor < len(m.choices)-1 {
-				m.cursor++
+			if m.list.Cursor() < len(m.list.Items())-1 {
+				m.list.CursorDown()
 			}
 		case "k", "up":
-			if m.cursor > 0 {
-				m.cursor--
+			if m.list.Cursor() > 0 {
+				m.list.CursorUp()
 			}
 		case " ", "enter":
 			_, ok := m.selected[m.cursor]
@@ -95,23 +143,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	s := "what should I do?\n"
-
-	for i, choice := range m.choices {
-		cursor := " "
-		if m.cursor == i {
-			cursor = ">"
-		}
-
-		checked := " "
-		if _, ok := m.selected[i]; ok {
-			checked = "x"
-		}
-
-		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice.name)
+	if m.choice != "" {
+		return quitTextStyle.Render(fmt.Sprintf("lets go", m.choice))
 	}
-
-	return s
+	return "\n" + m.list.View()
 }
 
 func main() {
