@@ -19,7 +19,7 @@ import (
 )
 
 type Song struct {
-	streamer beep.StreamSeekCloser
+	Streamer beep.StreamSeekCloser
 	format   beep.Format
 	Name     string
 }
@@ -62,7 +62,7 @@ func (q *SongsList) AddAllSongsToPlaylist(songs []string, dir string) {
 		}
 
 		song := Song{
-			streamer: streamer,
+			Streamer: streamer,
 			format:   format,
 			Name:     songs[songIndex],
 		}
@@ -118,7 +118,7 @@ func StartSong(control Control, playlist *SongsList, playlistIndex int) *beep.Ct
 		speaker.Init(sr.SampleRate, sr.SampleRate.N(time.Second/10))
 	}
 
-	ctrl := &beep.Ctrl{Streamer: playlist.Songs[playlistIndex].streamer, Paused: false}
+	ctrl := &beep.Ctrl{Streamer: playlist.Songs[playlistIndex].Streamer, Paused: false}
 	volume := &effects.Volume{
 		Streamer: ctrl,
 		Base:     2,
@@ -131,23 +131,23 @@ func StartSong(control Control, playlist *SongsList, playlistIndex int) *beep.Ct
 	return ctrl
 }
 
-func goToNextSong(playlist *SongsList, playlistIndex *int) {
+func GoToNextSong(playlist *SongsList, playlistIndex int) {
 	speaker.Lock()
-	playlist.Songs[*playlistIndex].streamer.Close()
-	*playlistIndex += 1
+	playlist.Songs[playlistIndex].Streamer.Close()
+	playlistIndex += 1
 	speaker.Unlock()
 }
 
 func goToSong(playlist *SongsList, playlistIndex *int, songIndex int) {
 	speaker.Lock()
-	playlist.Songs[*playlistIndex].streamer.Close()
+	playlist.Songs[*playlistIndex].Streamer.Close()
 	*playlistIndex = songIndex
 	speaker.Unlock()
 }
 
 func goToRandomSong(playlist *SongsList, playlistIndex *int) {
 	speaker.Lock()
-	playlist.Songs[*playlistIndex].streamer.Close()
+	playlist.Songs[*playlistIndex].Streamer.Close()
 	*playlistIndex = rand.Intn(len(playlist.Songs))
 	speaker.Unlock()
 }
@@ -161,17 +161,17 @@ func waitForUserInput(c chan string) {
 	}
 }
 
-func isSongFinished(playlist *SongsList, playlistIndex int) bool {
-	songLen := playlist.Songs[playlistIndex].streamer.Len()
-	songPos := playlist.Songs[playlistIndex].streamer.Position()
+func IsSongFinished(playlist *SongsList, playlistIndex int) bool {
+	songLen := playlist.Songs[playlistIndex].Streamer.Len()
+	songPos := playlist.Songs[playlistIndex].Streamer.Position()
 	return songLen == songPos
 }
 
 func songProgress(playlist *SongsList, playlistIndex int) {
-	songLen := playlist.Songs[playlistIndex].streamer.Len()
+	songLen := playlist.Songs[playlistIndex].Streamer.Len()
 	chunkSize := songLen / 30
 
-	chunksListened := playlist.Songs[playlistIndex].streamer.Position() / chunkSize
+	chunksListened := playlist.Songs[playlistIndex].Streamer.Position() / chunkSize
 
 	progressString := "\r" + playlist.Songs[playlistIndex].Name + " ["
 

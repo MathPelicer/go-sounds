@@ -4,22 +4,27 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"go-sounds/utils"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 type model struct {
-	list     list.Model
-	choice   string
-	cursor   int
-	selected map[int]struct{}
-	quitting bool
-	playlist utils.SongsList
+	list        list.Model
+	choice      string
+	cursor      int
+	selected    map[int]struct{}
+	quitting    bool
+	playlist    utils.SongsList
+	songPlaying int
+	sub         chan struct{} // where we'll receive activity notifications
+	spinner     spinner.Model
 }
 
 var (
@@ -58,6 +63,31 @@ type item string
 
 func (i item) FilterValue() string { return "" }
 
+type responseMsg struct{}
+
+func listenForActivity(m model) tea.Cmd {
+	return func() tea.Msg {
+		for {
+			if m.isSongFinished() {
+				m.sub <- struct{}{}
+			}
+		}
+	}
+}
+
+func (m model) isSongFinished() bool {
+	songLen := m.playlist.Songs[m.songPlaying].Streamer.Len()
+	songPos := m.playlist.Songs[m.songPlaying].Streamer.Position()
+	return songLen == songPos
+}
+
+// A command that waits for the activity on a channel.
+func waitForActivity(sub chan struct{}) tea.Cmd {
+	return func() tea.Msg {
+		return responseMsg(<-sub)
+	}
+}
+
 func initialModel() model {
 	dir := utils.VerifyOS()
 	songs := utils.ListSongs(dir)
@@ -74,11 +104,17 @@ func initialModel() model {
 		list:     l,
 		selected: make(map[int]struct{}),
 		playlist: *playlist,
+		spinner:  spinner.New(),
+		sub:      make(chan struct{}),
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return tea.Batch(
+		m.spinner.Tick,
+		listenForActivity(m),   // generate activity
+		waitForActivity(m.sub), // wait for activity
+	)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -86,7 +122,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch message.String() {
 		case "ctrl+c", "q":
-			return m, tea.Quit
+			return &m, tea.Quit
 		case "j", "down":
 			if m.list.Cursor() < len(m.list.Items())-1 {
 				m.list.CursorDown()
@@ -97,24 +133,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case " ", "enter":
 			control := utils.START
+			m.songPlaying = m.list.Index()
 			utils.StartSong(control, &m.playlist, m.list.Index())
-			_, ok := m.selected[m.cursor]
-			if ok {
-				delete(m.selected, m.cursor)
-			} else {
-				m.selected[m.cursor] = struct{}{}
-			}
+			return m, waitForActivity(m.sub)
 		}
+	case responseMsg:
+		utils.GoToNextSong(&m.playlist, m.songPlaying)
+		control := utils.NEXT
+		m.songPlaying += 1
+		utils.StartSong(control, &m.playlist, m.songPlaying)
+		return m, waitForActivity(m.sub)
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		if m.isSongFinished() {
+			m.sub <- struct{}{}
+		}
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+	default:
+
 	}
 
-	return m, nil
+	return &m, nil
 }
 
 func (m model) View() string {
 	if m.choice != "" {
 		return quitTextStyle.Render(fmt.Sprintf("lets go", m.choice))
 	}
-	return "\n" + m.list.View()
+	return "\n" + m.list.View() + "\n\n" + "playing now index: " + strconv.Itoa(m.songPlaying) + " " + m.playlist.Songs[m.songPlaying].Name + strconv.Itoa(m.playlist.Songs[m.songPlaying].Streamer.Len()) + " - " + strconv.Itoa(m.playlist.Songs[m.songPlaying].Streamer.Position())
 }
 
 func main() {
