@@ -118,6 +118,7 @@ func StartSong(control Control, playlist *SongsList, playlistIndex int) *beep.Ct
 		speaker.Init(sr.SampleRate, sr.SampleRate.N(time.Second/10))
 	}
 
+	playlist.Songs[playlistIndex].Streamer.Seek(0)
 	ctrl := &beep.Ctrl{Streamer: playlist.Songs[playlistIndex].Streamer, Paused: false}
 	volume := &effects.Volume{
 		Streamer: ctrl,
