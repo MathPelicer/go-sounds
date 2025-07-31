@@ -143,19 +143,6 @@ func GoToNextSong(streamer beep.StreamSeekCloser, playlistIndex int) {
 	speaker.Unlock()
 }
 
-// func goToSong(playlist *SongsList, playlistIndex *int, songIndex int) {
-// 	speaker.Lock()
-// 	playlist.Songs[*playlistIndex].Streamer.Close()
-// 	*playlistIndex = songIndex
-// 	speaker.Unlock()
-// }
-
-// func goToRandomSong(playlist *SongsList, playlistIndex *int) {
-// 	speaker.Lock()
-// 	playlist.Songs[*playlistIndex].Streamer.Close()
-// 	*playlistIndex = rand.Intn(len(playlist.Songs))
-// 	speaker.Unlock()
-// }
 
 func waitForUserInput(c chan string) {
 	reader := bufio.NewReader(os.Stdin)
@@ -165,29 +152,3 @@ func waitForUserInput(c chan string) {
 		c <- strings.TrimSuffix(char, "\n")
 	}
 }
-
-// func IsSongFinished(playlist *SongsList, playlistIndex int) bool {
-// 	songLen := playlist.Songs[playlistIndex].Streamer.Len()
-// 	songPos := playlist.Songs[playlistIndex].Streamer.Position()
-// 	return songLen == songPos
-// }
-
-// func songProgress(playlist *SongsList, playlistIndex int) {
-// 	songLen := playlist.Songs[playlistIndex].Streamer.Len()
-// 	chunkSize := songLen / 30
-
-// 	chunksListened := playlist.Songs[playlistIndex].Streamer.Position() / chunkSize
-
-// 	progressString := "\r" + playlist.Songs[playlistIndex].Name + " ["
-
-// 	for i := 0; i < 30; i++ {
-// 		if i <= chunksListened {
-// 			progressString += "#"
-// 		} else {
-// 			progressString += " "
-// 		}
-// 	}
-// 	progressString += "]"
-
-// 	fmt.Printf("\r%s", progressString)
-// }
