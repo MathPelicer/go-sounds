@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
-	"math/rand"
 	"os"
 	"path"
 	"runtime"
@@ -19,9 +18,7 @@ import (
 )
 
 type Song struct {
-	Streamer beep.StreamSeekCloser
-	format   beep.Format
-	Name     string
+	Name string
 }
 
 type SongsList struct {
@@ -56,15 +53,13 @@ func (q *SongsList) AddAllSongsToPlaylist(songs []string, dir string) {
 			log.Fatal("cant open file")
 		}
 
-		streamer, format, err := mp3.Decode(f)
+		_, _, err = mp3.Decode(f)
 		if err != nil {
 			log.Fatal("cant decode file")
 		}
 
 		song := Song{
-			Streamer: streamer,
-			format:   format,
-			Name:     songs[songIndex],
+			Name: songs[songIndex],
 		}
 
 		q.Add(song)
@@ -112,18 +107,28 @@ func SelectSong(songs []string) int {
 	return songIndex
 }
 
-func StartSong(control Control, playlist *SongsList, playlistIndex int) *beep.Ctrl {
-	if control == START || control == NEXT {
-		sr := playlist.Songs[playlistIndex].format
-		speaker.Init(sr.SampleRate, sr.SampleRate.N(time.Second/10))
+func OpenSong(songs []Song, dir string, songIndex int) (streamer beep.StreamSeekCloser, format beep.Format) {
+	f, err := os.Open(path.Join(dir, songs[songIndex].Name))
+	if err != nil {
+		log.Fatal("cant open file")
 	}
 
-	playlist.Songs[playlistIndex].Streamer.Seek(0)
-	ctrl := &beep.Ctrl{Streamer: playlist.Songs[playlistIndex].Streamer, Paused: false}
+	streamer, format, err = mp3.Decode(f)
+	if err != nil {
+		log.Fatal("cant decode file")
+	}
+
+	return streamer, format
+}
+
+func StartSong(streamer beep.StreamSeekCloser, format beep.Format) *beep.Ctrl {
+	speaker.Init(format.SampleRate, format.SampleRate.N(time.Second/10))
+
+	ctrl := &beep.Ctrl{Streamer: streamer, Paused: false}
 	volume := &effects.Volume{
 		Streamer: ctrl,
 		Base:     2,
-		Volume:   -4.0,
+		Volume:   -6.0,
 		Silent:   false,
 	}
 
@@ -132,26 +137,25 @@ func StartSong(control Control, playlist *SongsList, playlistIndex int) *beep.Ct
 	return ctrl
 }
 
-func GoToNextSong(playlist *SongsList, playlistIndex int) {
+func GoToNextSong(streamer beep.StreamSeekCloser, playlistIndex int) {
 	speaker.Lock()
-	playlist.Songs[playlistIndex].Streamer.Close()
-	playlistIndex += 1
+	streamer.Close()
 	speaker.Unlock()
 }
 
-func goToSong(playlist *SongsList, playlistIndex *int, songIndex int) {
-	speaker.Lock()
-	playlist.Songs[*playlistIndex].Streamer.Close()
-	*playlistIndex = songIndex
-	speaker.Unlock()
-}
+// func goToSong(playlist *SongsList, playlistIndex *int, songIndex int) {
+// 	speaker.Lock()
+// 	playlist.Songs[*playlistIndex].Streamer.Close()
+// 	*playlistIndex = songIndex
+// 	speaker.Unlock()
+// }
 
-func goToRandomSong(playlist *SongsList, playlistIndex *int) {
-	speaker.Lock()
-	playlist.Songs[*playlistIndex].Streamer.Close()
-	*playlistIndex = rand.Intn(len(playlist.Songs))
-	speaker.Unlock()
-}
+// func goToRandomSong(playlist *SongsList, playlistIndex *int) {
+// 	speaker.Lock()
+// 	playlist.Songs[*playlistIndex].Streamer.Close()
+// 	*playlistIndex = rand.Intn(len(playlist.Songs))
+// 	speaker.Unlock()
+// }
 
 func waitForUserInput(c chan string) {
 	reader := bufio.NewReader(os.Stdin)
@@ -162,28 +166,28 @@ func waitForUserInput(c chan string) {
 	}
 }
 
-func IsSongFinished(playlist *SongsList, playlistIndex int) bool {
-	songLen := playlist.Songs[playlistIndex].Streamer.Len()
-	songPos := playlist.Songs[playlistIndex].Streamer.Position()
-	return songLen == songPos
-}
+// func IsSongFinished(playlist *SongsList, playlistIndex int) bool {
+// 	songLen := playlist.Songs[playlistIndex].Streamer.Len()
+// 	songPos := playlist.Songs[playlistIndex].Streamer.Position()
+// 	return songLen == songPos
+// }
 
-func songProgress(playlist *SongsList, playlistIndex int) {
-	songLen := playlist.Songs[playlistIndex].Streamer.Len()
-	chunkSize := songLen / 30
+// func songProgress(playlist *SongsList, playlistIndex int) {
+// 	songLen := playlist.Songs[playlistIndex].Streamer.Len()
+// 	chunkSize := songLen / 30
 
-	chunksListened := playlist.Songs[playlistIndex].Streamer.Position() / chunkSize
+// 	chunksListened := playlist.Songs[playlistIndex].Streamer.Position() / chunkSize
 
-	progressString := "\r" + playlist.Songs[playlistIndex].Name + " ["
+// 	progressString := "\r" + playlist.Songs[playlistIndex].Name + " ["
 
-	for i := 0; i < 30; i++ {
-		if i <= chunksListened {
-			progressString += "#"
-		} else {
-			progressString += " "
-		}
-	}
-	progressString += "]"
+// 	for i := 0; i < 30; i++ {
+// 		if i <= chunksListened {
+// 			progressString += "#"
+// 		} else {
+// 			progressString += " "
+// 		}
+// 	}
+// 	progressString += "]"
 
-	fmt.Printf("\r%s", progressString)
-}
+// 	fmt.Printf("\r%s", progressString)
+// }

@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/faiface/beep"
 )
 
 type model struct {
@@ -25,6 +26,8 @@ type model struct {
 	songPlaying int
 	sub         chan struct{} // where we'll receive activity notifications
 	spinner     spinner.Model
+	streamer    beep.StreamSeekCloser
+	format      beep.Format
 }
 
 var (
@@ -70,14 +73,18 @@ func listenForActivity(m model) tea.Cmd {
 		for {
 			if m.isSongFinished() {
 				m.sub <- struct{}{}
+
 			}
 		}
 	}
 }
 
 func (m model) isSongFinished() bool {
-	songLen := m.playlist.Songs[m.songPlaying].Streamer.Len()
-	songPos := m.playlist.Songs[m.songPlaying].Streamer.Position()
+	if m.streamer == nil {
+		return false
+	}
+	songLen := m.streamer.Len()
+	songPos := m.streamer.Position()
 	return songLen == songPos
 }
 
@@ -132,16 +139,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.list.CursorUp()
 			}
 		case " ", "enter":
-			control := utils.START
 			m.songPlaying = m.list.Index()
-			utils.StartSong(control, &m.playlist, m.list.Index())
+			m.streamer, m.format = utils.OpenSong(m.playlist.Songs, utils.VerifyOS(), m.songPlaying)
+			utils.StartSong(m.streamer, m.format)
 			return m, waitForActivity(m.sub)
 		}
 	case responseMsg:
-		utils.GoToNextSong(&m.playlist, m.songPlaying)
-		control := utils.NEXT
+		utils.GoToNextSong(m.streamer, m.songPlaying)
 		m.songPlaying += 1
-		utils.StartSong(control, &m.playlist, m.songPlaying)
+		m.streamer, m.format = utils.OpenSong(m.playlist.Songs, utils.VerifyOS(), m.songPlaying)
+		utils.StartSong(m.streamer, m.format)
 		return m, waitForActivity(m.sub)
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -161,7 +168,7 @@ func (m model) View() string {
 	if m.choice != "" {
 		return quitTextStyle.Render(fmt.Sprintf("lets go", m.choice))
 	}
-	return "\n" + m.list.View() + "\n\n" + "playing now index: " + strconv.Itoa(m.songPlaying) + " " + m.playlist.Songs[m.songPlaying].Name + strconv.Itoa(m.playlist.Songs[m.songPlaying].Streamer.Len()) + " - " + strconv.Itoa(m.playlist.Songs[m.songPlaying].Streamer.Position())
+	return "\n" + m.list.View() + "\n\n" + "playing now index: " + strconv.Itoa(m.songPlaying) + " " + m.playlist.Songs[m.songPlaying].Name
 }
 
 func main() {
