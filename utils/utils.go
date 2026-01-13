@@ -1,14 +1,12 @@
 package utils
 
 import (
-	"bufio"
 	"fmt"
 	"io/fs"
 	"log"
 	"os"
 	"path"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/faiface/beep"
@@ -36,7 +34,7 @@ const (
 
 func VerifyOS() string {
 	if runtime.GOOS == "windows" {
-		return "C:/Users/mathe/Music/System Of A Down/Hypnotize"
+		return "C:/Users/mathe/Music/System Of A Down/Toxicity"
 	} else {
 		return "/home/mathe/Music"
 	}
@@ -128,7 +126,7 @@ func StartSong(streamer beep.StreamSeekCloser, format beep.Format) *beep.Ctrl {
 	volume := &effects.Volume{
 		Streamer: ctrl,
 		Base:     2,
-		Volume:   -6.0,
+		Volume:   -4.0,
 		Silent:   false,
 	}
 
@@ -137,18 +135,18 @@ func StartSong(streamer beep.StreamSeekCloser, format beep.Format) *beep.Ctrl {
 	return ctrl
 }
 
+func PauseSong(isSongPaused bool) bool {
+	if !isSongPaused {
+		speaker.Lock()
+		return true
+	} else {
+		speaker.Unlock()
+		return false
+	}
+}
+
 func GoToNextSong(streamer beep.StreamSeekCloser, playlistIndex int) {
 	speaker.Lock()
 	streamer.Close()
 	speaker.Unlock()
-}
-
-
-func waitForUserInput(c chan string) {
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		char, _ := reader.ReadString('\n')
-
-		c <- strings.TrimSuffix(char, "\n")
-	}
 }

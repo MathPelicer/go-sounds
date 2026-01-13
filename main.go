@@ -17,17 +17,18 @@ import (
 )
 
 type model struct {
-	list        list.Model
-	choice      string
-	cursor      int
-	selected    map[int]struct{}
-	quitting    bool
-	playlist    utils.SongsList
-	songPlaying int
-	sub         chan struct{} // where we'll receive activity notifications
-	spinner     spinner.Model
-	streamer    beep.StreamSeekCloser
-	format      beep.Format
+	list         list.Model
+	choice       string
+	cursor       int
+	selected     map[int]struct{}
+	quitting     bool
+	playlist     utils.SongsList
+	songPlaying  int
+	isSongPaused bool
+	sub          chan struct{} // where we'll receive activity notifications
+	spinner      spinner.Model
+	streamer     beep.StreamSeekCloser
+	format       beep.Format
 }
 
 var (
@@ -138,6 +139,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.list.Cursor() > 0 {
 				m.list.CursorUp()
 			}
+		// case "v":
+		// 	ChangeViews()
+		case "p":
+			m.isSongPaused = utils.PauseSong(m.isSongPaused)
 		case " ", "enter":
 			m.songPlaying = m.list.Index()
 			m.streamer, m.format = utils.OpenSong(m.playlist.Songs, utils.VerifyOS(), m.songPlaying)
@@ -163,6 +168,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	return &m, nil
 }
+
+// func (m model) ChangeViews() string {
+
+// }
 
 func (m model) View() string {
 	if m.choice != "" {
