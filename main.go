@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/faiface/beep"
+	"github.com/lucasb-eyer/go-colorful"
 )
 
 type model struct {
@@ -31,6 +33,12 @@ type model struct {
 	format       beep.Format
 }
 
+const (
+	progressBarWidth  = 100
+	progressFullChar  = "█"
+	progressEmptyChar = "░"
+)
+
 var (
 	titleStyle        = lipgloss.NewStyle().MarginLeft(2)
 	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
@@ -38,7 +46,34 @@ var (
 	paginationStyle   = list.DefaultStyles().PaginationStyle.PaddingLeft(4)
 	helpStyle         = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
 	quitTextStyle     = lipgloss.NewStyle().Margin(1, 0, 2, 4)
+
+	ramp          = makeRampStyles("#B14FFF", "#00FFA3", progressBarWidth)
+	subtleStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	progressEmpty = subtleStyle.Render(progressEmptyChar)
 )
+
+func colorFloatToHex(f float64) (s string) {
+	s = strconv.FormatInt(int64(f*255), 16)
+	if len(s) == 1 {
+		s = "0" + s
+	}
+	return
+}
+
+func colorToHex(c colorful.Color) string {
+	return fmt.Sprintf("#%s%s%s", colorFloatToHex(c.R), colorFloatToHex(c.G), colorFloatToHex(c.B))
+}
+
+func makeRampStyles(colorA, colorB string, steps float64) (s []lipgloss.Style) {
+	cA, _ := colorful.Hex(colorA)
+	cB, _ := colorful.Hex(colorB)
+
+	for i := 0.0; i < steps; i++ {
+		c := cA.BlendLuv(cB, i/steps)
+		s = append(s, lipgloss.NewStyle().Foreground(lipgloss.Color(colorToHex(c))))
+	}
+	return
+}
 
 type itemDelegate struct{}
 
@@ -177,7 +212,35 @@ func (m model) View() string {
 	if m.choice != "" {
 		return quitTextStyle.Render(fmt.Sprintf("lets go", m.choice))
 	}
-	return "\n" + m.list.View() + "\n\n" + "playing now index: " + strconv.Itoa(m.songPlaying) + " " + m.playlist.Songs[m.songPlaying].Name
+	return "\n" + m.list.View() + "\n\n" + "playing now index: " + strconv.Itoa(m.songPlaying) + " " + m.playlist.Songs[m.songPlaying].Name + "\n\n" + progressbar(m)
+}
+
+func progressbar(m model) string {
+	if m.streamer == nil {
+		return ""
+	}
+
+	// TODO: normalize position values to fit the 100 width
+	w := float64(progressBarWidth)
+	songLen := m.streamer.Len()
+	songPos := m.streamer.Position()
+	//musicPos := m.streamer.Position() / m.streamer.Len()
+	percent := float64(getPersentageSong(songLen, songPos))
+
+	fullSize := int(math.Round(w * percent))
+	var fullCells string
+	for i := 0; i < fullSize; i++ {
+		fullCells += ramp[i].Render(progressFullChar)
+	}
+
+	emptySize := int(w) - fullSize
+	emptyCells := strings.Repeat(progressEmpty, emptySize)
+
+	return fmt.Sprintf("%s%s %3.0f", fullCells, emptyCells, math.Round(percent*100))
+}
+
+func getPersentageSong(lenght int, position int) float64 {
+	return (float64(position) / float64(lenght))
 }
 
 func main() {
